@@ -118,13 +118,18 @@ class CNN(object):
             if(idx_k == 0): concats = cardinal
             else: concats = tf.concat([concats, cardinal], axis=3)
 
-        conv_con = self.customlayers.conv2d(concats, \
-            self.customlayers.get_weight(vshape=[1, 1, minchannel, outchannel], name="%s_con" %(name)), \
+        convtmp_1 = self.customlayers.conv2d(concats, \
+            self.customlayers.get_weight(vshape=[ksize, ksize, minchannel, inchannel], name="%s_1" %(name)), \
             stride_size=1, padding='SAME')
-        conv_con_bn = self.customlayers.batch_norm(conv_con, name="%s_con_bn" %(name))
-        conv_con_act = self.customlayers.elu(conv_con_bn)
+        convtmp_1bn = self.customlayers.batch_norm(convtmp_1, name="%s_1bn" %(name))
+        convtmp_1act = self.customlayers.elu(convtmp_1bn)
+        convtmp_2 = self.customlayers.conv2d(convtmp_1act, \
+            self.customlayers.get_weight(vshape=[ksize, ksize, inchannel, outchannel], name="%s_2" %(name)), \
+            stride_size=1, padding='SAME')
+        convtmp_2bn = self.customlayers.batch_norm(convtmp_2, name="%s_2bn" %(name))
+        convtmp_2act = self.customlayers.elu(convtmp_2bn)
 
-        if(input.shape[-1] != conv_con_act.shape[-1]):
+        if(input.shape[-1] != convtmp_2act.shape[-1]):
             convtmp_sc = self.customlayers.conv2d(input, \
                 self.customlayers.get_weight(vshape=[1, 1, inchannel, outchannel], name="%s_sc" %(name)), \
                 stride_size=1, padding='SAME')
@@ -132,7 +137,7 @@ class CNN(object):
             convtmp_scact = self.customlayers.elu(convtmp_scbn)
             input = convtmp_scact
 
-        output = input + conv_con_act
+        output = input + convtmp_2act
 
         if(verbose): print(name, output.shape)
         return output
