@@ -6,7 +6,7 @@ class CNN(object):
 
     def __init__(self, height, width, channel, num_class, ksize, learning_rate=1e-3, ckpt_dir='./Checkpoint'):
 
-        print("\nInitializing Short-ResNet...")
+        print("\nInitializing Short-ResNeSt...")
         self.height, self.width, self.channel, self.num_class = height, width, channel, num_class
         self.ksize, self.learning_rate = ksize, learning_rate
         self.ckpt_dir = ckpt_dir
@@ -35,8 +35,8 @@ class CNN(object):
             self.optimizer.apply_gradients(zip(gradients, self.customlayers.params_trainable))
 
             with self.summary_writer.as_default():
-                tf.summary.scalar('ResNet/loss', loss, step=iteration)
-                tf.summary.scalar('ResNet/accuracy', accuracy, step=iteration)
+                tf.summary.scalar('ResNeSt/loss', loss, step=iteration)
+                tf.summary.scalar('ResNeSt/accuracy', accuracy, step=iteration)
 
         return loss, accuracy, score
 
@@ -127,3 +127,32 @@ class CNN(object):
 
         if(verbose): print(name, output.shape)
         return output
+
+    def split_attention(self, inputs, inchannel, name=""):
+
+        radix = len(inputs)
+        input_holder = None
+        for idx_i, input in enumerate(inputs):
+            if(idx_i == 0): input_holder = input
+            else: input_holder += input
+
+        ga_pool = tf.math.reduce_mean(input_holder, axis=(1, 2))
+
+        dense1 = self.customlayers.conv2d(ga_pool, \
+            self.customlayers.get_weight(vshape=[1, 1, inchannel, inchannel//2], name="%s" %(name)), \
+            stride_size=1, padding='SAME')
+        dense1_bn = self.customlayers.batch_norm(dense1, name="%s_bn" %(name))
+        dense1_act = self.customlayers.elu(dense1_bn)
+
+        output_holder = None
+        for idx_i in range(radix):
+            dense2 = self.customlayers.conv2d(ga_pool, \
+                self.customlayers.get_weight(vshape=[1, 1, inchannel//2, inchannel], name="%s" %(name)), \
+                stride_size=1, padding='SAME')
+            if(radix == 1): r_softmax = self.customlayers.sigmoid(dense2)
+            elif(radix > 1): r_softmax = self.customlayers.softmax(dense2)
+
+            if(idx_i == 0): output_holder = inputs[idx_i] * r_softmax
+            else: output_holder += inputs[idx_i] * r_softmax
+
+        return output_holder
