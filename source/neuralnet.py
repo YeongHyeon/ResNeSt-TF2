@@ -4,11 +4,13 @@ import source.layers as lay
 
 class CNN(object):
 
-    def __init__(self, height, width, channel, num_class, ksize, learning_rate=1e-3, ckpt_dir='./Checkpoint'):
+    def __init__(self, height, width, channel, num_class, \
+        ksize, radix=2, kpaths=4, learning_rate=1e-3, ckpt_dir='./Checkpoint'):
 
         print("\nInitializing Short-ResNeSt...")
         self.height, self.width, self.channel, self.num_class = height, width, channel, num_class
         self.ksize, self.learning_rate = ksize, learning_rate
+        self.radix, self.kpaths = radix, kpaths
         self.ckpt_dir = ckpt_dir
 
         self.customlayers = lay.Layers()
@@ -74,16 +76,20 @@ class CNN(object):
         conv1_act = self.customlayers.elu(conv1_bn)
         conv1_pool = self.customlayers.maxpool(conv1_act, pool_size=2, stride_size=2)
 
-        conv2_1 = self.residual(conv1_pool, \
-            ksize=self.ksize, inchannel=16, outchannel=32, name="conv2_1", verbose=verbose)
-        conv2_2 = self.residual(conv2_1, \
-            ksize=self.ksize, inchannel=32, outchannel=32, name="conv2_2", verbose=verbose)
+        conv2_1 = self.residual_S(conv1_pool, \
+            ksize=self.ksize, inchannel=16, outchannel=32, \
+            radix=self.radix, kpaths=self.kpaths, name="conv2_1", verbose=verbose)
+        conv2_2 = self.residual_S(conv2_1, \
+            ksize=self.ksize, inchannel=32, outchannel=32, \
+            radix=self.radix, kpaths=self.kpaths, name="conv2_2", verbose=verbose)
         conv2_pool = self.customlayers.maxpool(conv2_2, pool_size=2, stride_size=2)
 
-        conv3_1 = self.residual(conv2_pool, \
-            ksize=self.ksize, inchannel=32, outchannel=64, name="conv3_1", verbose=verbose)
-        conv3_2 = self.residual(conv3_1, \
-            ksize=self.ksize, inchannel=64, outchannel=64, name="conv3_2", verbose=verbose)
+        conv3_1 = self.residual_S(conv2_pool, \
+            ksize=self.ksize, inchannel=32, outchannel=64, \
+            radix=self.radix, kpaths=self.kpaths, name="conv3_1", verbose=verbose)
+        conv3_2 = self.residual_S(conv3_1, \
+            ksize=self.ksize, inchannel=64, outchannel=64, \
+            radix=self.radix, kpaths=self.kpaths, name="conv3_2", verbose=verbose)
 
         [n, h, w, c] = conv3_2.shape
         flat = tf.compat.v1.reshape(conv3_2, shape=[-1, h*w*c], name="flat")
@@ -102,20 +108,23 @@ class CNN(object):
 
         return fc1
 
-    def residual(self, input, ksize, inchannel, outchannel, name="", verbose=False):
+    def residual_S(self, input, ksize, inchannel, outchannel, \
+        radix, kpaths, name="", verbose=False):
 
-        convtmp_1 = self.customlayers.conv2d(input, \
-            self.customlayers.get_weight(vshape=[ksize, ksize, inchannel, outchannel], name="%s_1" %(name)), \
-            stride_size=1, padding='SAME')
-        convtmp_1bn = self.customlayers.batch_norm(convtmp_1, name="%s_1bn" %(name))
-        convtmp_1act = self.customlayers.elu(convtmp_1bn)
-        convtmp_2 = self.customlayers.conv2d(convtmp_1act, \
-            self.customlayers.get_weight(vshape=[ksize, ksize, outchannel, outchannel], name="%s_2" %(name)), \
-            stride_size=1, padding='SAME')
-        convtmp_2bn = self.customlayers.batch_norm(convtmp_2, name="%s_2bn" %(name))
-        convtmp_2act = self.customlayers.elu(convtmp_2bn)
+        minchannel = inchannel//2
+        concats = None
+        for idx_k in range(kpaths):
+            cardinal = self.cardinal(input, ksize, inchannel, minchannel, radix, kpaths, name="%s_car_k%d" %(name, idx_k))
+            if(idx_k == 0): concats = cardinal
+            else: concats = tf.concat([concats, cardinal], axis=3)
 
-        if(input.shape[-1] != convtmp_2act.shape[-1]):
+        conv_con = self.customlayers.conv2d(concats, \
+            self.customlayers.get_weight(vshape=[1, 1, minchannel, outchannel], name="%s_con" %(name)), \
+            stride_size=1, padding='SAME')
+        conv_con_bn = self.customlayers.batch_norm(conv_con, name="%s_con_bn" %(name))
+        conv_con_act = self.customlayers.elu(conv_con_bn)
+
+        if(input.shape[-1] != conv_con_act.shape[-1]):
             convtmp_sc = self.customlayers.conv2d(input, \
                 self.customlayers.get_weight(vshape=[1, 1, inchannel, outchannel], name="%s_sc" %(name)), \
                 stride_size=1, padding='SAME')
@@ -123,13 +132,38 @@ class CNN(object):
             convtmp_scact = self.customlayers.elu(convtmp_scbn)
             input = convtmp_scact
 
-        output = input + convtmp_2act
+        output = input + conv_con_act
 
         if(verbose): print(name, output.shape)
         return output
 
-    def split_attention(self, inputs, inchannel, name=""):
+    def cardinal(self, input, ksize, inchannel, outchannel, \
+        radix, kpaths, name="", verbose=False):
 
+        if(verbose): print("cardinal")
+        outchannel_cv11 = int(outchannel / radix / kpaths)
+        outchannel_cvkk = int(outchannel / kpaths)
+
+        inputs = []
+        for idx_r in range(radix):
+            conv1 = self.customlayers.conv2d(input, \
+                self.customlayers.get_weight(vshape=[1, 1, inchannel, outchannel_cv11], name="%s1_r%d" %(name, idx_r)), \
+                stride_size=1, padding='SAME')
+            conv1_bn = self.customlayers.batch_norm(conv1, name="%s1_bn" %(name))
+            conv1_act = self.customlayers.elu(conv1_bn)
+
+            conv2 = self.customlayers.conv2d(conv1_act, \
+                self.customlayers.get_weight(vshape=[ksize, ksize, outchannel_cv11, outchannel_cvkk], name="%s2_r%d" %(name, idx_r)), \
+                stride_size=1, padding='SAME')
+            conv2_bn = self.customlayers.batch_norm(conv2, name="%s2_bn" %(name))
+            conv2_act = self.customlayers.elu(conv2_bn)
+            inputs.append(conv2_act)
+
+        return self.split_attention(inputs, outchannel_cvkk, name="%s_att" %(name))
+
+    def split_attention(self, inputs, inchannel, name="", verbose=False):
+
+        if(verbose): print("split attention")
         radix = len(inputs)
         input_holder = None
         for idx_i, input in enumerate(inputs):
@@ -137,22 +171,23 @@ class CNN(object):
             else: input_holder += input
 
         ga_pool = tf.math.reduce_mean(input_holder, axis=(1, 2))
+        ga_pool = tf.expand_dims(tf.expand_dims(ga_pool, axis=1), axis=1)
 
         dense1 = self.customlayers.conv2d(ga_pool, \
-            self.customlayers.get_weight(vshape=[1, 1, inchannel, inchannel//2], name="%s" %(name)), \
+            self.customlayers.get_weight(vshape=[1, 1, inchannel, inchannel//2], name="%s1" %(name)), \
             stride_size=1, padding='SAME')
         dense1_bn = self.customlayers.batch_norm(dense1, name="%s_bn" %(name))
         dense1_act = self.customlayers.elu(dense1_bn)
 
         output_holder = None
-        for idx_i in range(radix):
-            dense2 = self.customlayers.conv2d(ga_pool, \
-                self.customlayers.get_weight(vshape=[1, 1, inchannel//2, inchannel], name="%s" %(name)), \
+        for idx_r in range(radix):
+            dense2 = self.customlayers.conv2d(dense1_act, \
+                self.customlayers.get_weight(vshape=[1, 1, inchannel//2, inchannel], name="%s2_r%d" %(name, idx_r)), \
                 stride_size=1, padding='SAME')
             if(radix == 1): r_softmax = self.customlayers.sigmoid(dense2)
             elif(radix > 1): r_softmax = self.customlayers.softmax(dense2)
 
-            if(idx_i == 0): output_holder = inputs[idx_i] * r_softmax
-            else: output_holder += inputs[idx_i] * r_softmax
+            if(idx_r == 0): output_holder = inputs[idx_r] * r_softmax
+            else: output_holder += inputs[idx_r] * r_softmax
 
         return output_holder
