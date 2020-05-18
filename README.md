@@ -1,6 +1,8 @@
 [TensorFlow 2] ResNeSt: Split-Attention Networks
 =====
 
+TensorFlow implementation of "ResNeSt: Split-Attention Networks"  
+
 ## Related Repositories
 <a href="https://github.com/YeongHyeon/ResNet-TF2">ResNet-TF2</a>  
 <a href="https://github.com/YeongHyeon/ResNeXt-TF2">ResNeXt-TF2</a>  
