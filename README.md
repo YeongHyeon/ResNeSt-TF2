@@ -25,7 +25,7 @@ TensorFlow implementation of "ResNeSt: Split-Attention Networks"
 </div>
 
 <div align="center">
-  <img src="./figures/resnest.png" width="600">  
+  <img src="./figures/resnest.png" width="500">  
   <p>ResNeSt Diagram</p>
 </div>
 
