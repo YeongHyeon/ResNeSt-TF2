@@ -5,7 +5,7 @@ import source.layers as lay
 class CNN(object):
 
     def __init__(self, height, width, channel, num_class, \
-        ksize, radix=2, kpaths=4, learning_rate=1e-3, ckpt_dir='./Checkpoint'):
+        ksize, radix=4, kpaths=4, learning_rate=1e-3, ckpt_dir='./Checkpoint'):
 
         print("\nInitializing Short-ResNeSt...")
         self.height, self.width, self.channel, self.num_class = height, width, channel, num_class
@@ -111,25 +111,24 @@ class CNN(object):
     def residual_S(self, input, ksize, inchannel, outchannel, \
         radix, kpaths, name="", verbose=False):
 
-        minchannel = inchannel//2
-        concats = None
-        for idx_k in range(kpaths):
-            cardinal = self.cardinal(input, ksize, inchannel, minchannel, radix, kpaths, name="%s_car_k%d" %(name, idx_k))
-            if(idx_k == 0): concats = cardinal
-            else: concats = tf.concat([concats, cardinal], axis=3)
-
-        convtmp_1 = self.customlayers.conv2d(concats, \
-            self.customlayers.get_weight(vshape=[ksize, ksize, minchannel, inchannel], name="%s_1" %(name)), \
+        convtmp_1 = self.customlayers.conv2d(input, \
+            self.customlayers.get_weight(vshape=[ksize, ksize, inchannel, outchannel], name="%s_1" %(name)), \
             stride_size=1, padding='SAME')
         convtmp_1bn = self.customlayers.batch_norm(convtmp_1, name="%s_1bn" %(name))
         convtmp_1act = self.customlayers.elu(convtmp_1bn)
         convtmp_2 = self.customlayers.conv2d(convtmp_1act, \
-            self.customlayers.get_weight(vshape=[ksize, ksize, inchannel, outchannel], name="%s_2" %(name)), \
+            self.customlayers.get_weight(vshape=[ksize, ksize, outchannel, outchannel], name="%s_2" %(name)), \
             stride_size=1, padding='SAME')
         convtmp_2bn = self.customlayers.batch_norm(convtmp_2, name="%s_2bn" %(name))
         convtmp_2act = self.customlayers.elu(convtmp_2bn)
 
-        if(input.shape[-1] != convtmp_2act.shape[-1]):
+        concats = None
+        for idx_k in range(kpaths):
+            cardinal = self.cardinal(convtmp_2act, ksize, outchannel, outchannel, radix, kpaths, name="%s_car_k%d" %(name, idx_k))
+            if(idx_k == 0): concats = cardinal
+            else: concats = tf.concat([concats, cardinal], axis=3)
+
+        if(input.shape[-1] != concats.shape[-1]):
             convtmp_sc = self.customlayers.conv2d(input, \
                 self.customlayers.get_weight(vshape=[1, 1, inchannel, outchannel], name="%s_sc" %(name)), \
                 stride_size=1, padding='SAME')
@@ -137,7 +136,7 @@ class CNN(object):
             convtmp_scact = self.customlayers.elu(convtmp_scbn)
             input = convtmp_scact
 
-        output = input + convtmp_2act
+        output = input + concats
 
         if(verbose): print(name, output.shape)
         return output
