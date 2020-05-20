@@ -15,8 +15,23 @@ TensorFlow implementation of "ResNeSt: Split-Attention Networks"
 
 ## Concept
 <div align="center">
-  <img src="./figures/resnest.png" width="600">  
+  <img src="./figures/paper.png" width="600">  
   <p>Comparing SE-Net, SK-Net, and ResNeSt [1].</p>
+</div>
+
+<div align="center">
+  <img src="./figures/resnext.png" width="600">  
+  <p>ResNeXt Remind</p>
+</div>
+
+<div align="center">
+  <img src="./figures/resnest.png" width="600">  
+  <p>ResNeSt Diagram</p>
+</div>
+
+<div align="center">
+  <img src="./figures/split_attention.png" width="600">  
+  <p>Split-Attention in ResNest</p>
 </div>
 
 ## Performance
