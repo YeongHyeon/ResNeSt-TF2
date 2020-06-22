@@ -80,6 +80,6 @@ Total | Accuracy: 0.99130, Precision: 0.99123, Recall: 0.99138, F1-Score: 0.9912
 
 ## Appendix
 <div align="center">
-  <img src="./figures/star.png" width="500">  
+  <img src="./figures/star.png" width="800">  
   <p>The authors of ResNeSt [1] have marked stars in this repository.</p>
 </div>
