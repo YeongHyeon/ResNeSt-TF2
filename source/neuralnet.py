@@ -14,7 +14,7 @@ class CNN(object):
         self.ckpt_dir = ckpt_dir
 
         self.model = Neuralnet(height, width, channel, num_class, ksize, radix, kpaths)
-
+        self.model(x=tf.zeros((1, height, width, channel), dtype=tf.float32), verbose=True)
         self.optimizer = tf.optimizers.Adam(self.learning_rate)
 
         self.summary_writer = tf.summary.create_file_writer(self.ckpt_dir)
@@ -85,7 +85,7 @@ class Neuralnet(tf.Module):
         self.customlayers = lay.Layers()
 
     @tf.function
-    def __call__(self, x, verbose=True):
+    def __call__(self, x, verbose=False):
 
         if(verbose): print("input", x.shape)
 
