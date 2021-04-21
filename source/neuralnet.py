@@ -8,18 +8,19 @@ class CNN(object):
         ksize, radix=4, kpaths=4, learning_rate=1e-3, ckpt_dir='./Checkpoint'):
 
         print("\nInitializing Short-ResNeSt...")
-        self.height, self.width, self.channel, self.num_class = height, width, channel, num_class
-        self.ksize, self.learning_rate = ksize, learning_rate
-        self.radix, self.kpaths = radix, kpaths
+        self.height, self.width, self.channel, self.num_class, self.ksize, self.radix, self.kpaths = \
+            height, width, channel, num_class, ksize, radix, kpaths
+        self.learning_rate = learning_rate
         self.ckpt_dir = ckpt_dir
 
-        self.customlayers = lay.Layers()
-        self.model(tf.zeros([1, self.height, self.width, self.channel]), verbose=True)
+        self.model = Neuralnet(height, width, channel, num_class, ksize, radix, kpaths)
 
         self.optimizer = tf.optimizers.Adam(self.learning_rate)
 
         self.summary_writer = tf.summary.create_file_writer(self.ckpt_dir)
+        self.save_params()
 
+    @tf.function
     def step(self, x, y, iteration=0, train=False):
 
         with tf.GradientTape() as tape:
@@ -27,14 +28,14 @@ class CNN(object):
             smce = tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=logits)
             loss = tf.math.reduce_mean(smce)
 
-        score = self.customlayers.softmax(logits)
+        score = self.model.customlayers.softmax(logits)
         pred = tf.argmax(score, 1)
         correct_pred = tf.equal(pred, tf.argmax(y, 1))
         accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
         if(train):
-            gradients = tape.gradient(loss, self.customlayers.params_trainable)
-            self.optimizer.apply_gradients(zip(gradients, self.customlayers.params_trainable))
+            gradients = tape.gradient(loss, self.model.customlayers.params_trainable)
+            self.optimizer.apply_gradients(zip(gradients, self.model.customlayers.params_trainable))
 
             with self.summary_writer.as_default():
                 tf.summary.scalar('ResNeSt/loss', loss, step=iteration)
@@ -42,22 +43,30 @@ class CNN(object):
 
         return loss, accuracy, score
 
-    def save_params(self):
+    def save_params(self, tflite=False):
 
         vars_to_save = {}
-        for idx, name in enumerate(self.customlayers.name_bank):
-            vars_to_save[self.customlayers.name_bank[idx]] = self.customlayers.params_trainable[idx]
+        for idx, name in enumerate(self.model.customlayers.name_bank):
+            vars_to_save[self.model.customlayers.name_bank[idx]] = self.model.customlayers.params_trainable[idx]
         vars_to_save["optimizer"] = self.optimizer
 
         ckpt = tf.train.Checkpoint(**vars_to_save)
         ckptman = tf.train.CheckpointManager(ckpt, directory=self.ckpt_dir, max_to_keep=3)
         ckptman.save()
 
+        if(tflite):
+            conc_func = self.model.__call__.get_concrete_function(tf.TensorSpec(shape=(1, self.height, self.width, self.channel), dtype=tf.float32))
+            converter = tf.lite.TFLiteConverter.from_concrete_functions([conc_func])
+            tflite_model = converter.convert()
+
+            with open('model.tflite', 'wb') as f:
+                f.write(tflite_model)
+
     def load_params(self):
 
         vars_to_load = {}
-        for idx, name in enumerate(self.customlayers.name_bank):
-            vars_to_load[self.customlayers.name_bank[idx]] = self.customlayers.params_trainable[idx]
+        for idx, name in enumerate(self.model.customlayers.name_bank):
+            vars_to_load[self.model.customlayers.name_bank[idx]] = self.model.customlayers.params_trainable[idx]
         vars_to_load["optimizer"] = self.optimizer
 
         ckpt = tf.train.Checkpoint(**vars_to_load)
@@ -65,7 +74,18 @@ class CNN(object):
         status = ckpt.restore(latest_ckpt)
         status.expect_partial()
 
-    def model(self, x, verbose=False):
+class Neuralnet(tf.Module):
+
+    def __init__(self, height, width, channel, num_class, \
+        ksize, radix=4, kpaths=4):
+        super(Neuralnet, self).__init__()
+
+        self.height, self.width, self.channel, self.num_class = height, width, channel, num_class
+        self.ksize, self.radix, self.kpaths = ksize, radix, kpaths
+        self.customlayers = lay.Layers()
+
+    @tf.function
+    def __call__(self, x, verbose=True):
 
         if(verbose): print("input", x.shape)
 
