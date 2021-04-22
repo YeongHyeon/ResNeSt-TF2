@@ -20,7 +20,7 @@ def main():
     except: pass
 
     dataset = dman.Dataset(normalize=FLAGS.datnorm)
-    neuralnet = nn.CNN(height=dataset.height, width=dataset.width, channel=dataset.channel, \
+    neuralnet = nn.Agent(height=dataset.height, width=dataset.width, channel=dataset.channel, \
         num_class=dataset.num_class, ksize=3, learning_rate=FLAGS.lr, ckpt_dir=CKPT_DIR)
 
     tfp.training(neuralnet=neuralnet, dataset=dataset, epochs=FLAGS.epoch, batch_size=FLAGS.batch, normalize=True)

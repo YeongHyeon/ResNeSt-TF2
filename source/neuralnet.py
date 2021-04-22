@@ -2,7 +2,9 @@ import os
 import tensorflow as tf
 import source.layers as lay
 
-class CNN(object):
+from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_v2_as_graph
+
+class Agent(object):
 
     def __init__(self, height, width, channel, num_class, \
         ksize, radix=4, kpaths=4, learning_rate=1e-3, ckpt_dir='./Checkpoint'):
@@ -14,17 +16,19 @@ class CNN(object):
         self.ckpt_dir = ckpt_dir
 
         self.model = Neuralnet(height, width, channel, num_class, ksize, radix, kpaths)
-        self.model(x=tf.zeros((1, height, width, channel), dtype=tf.float32), verbose=True)
+        self.model.forward(x=tf.zeros((1, height, width, channel), dtype=tf.float32), verbose=True)
         self.optimizer = tf.optimizers.Adam(self.learning_rate)
+
+        conc_func = self.model.__call__.get_concrete_function(tf.TensorSpec(shape=(1, self.height, self.width, self.channel), dtype=tf.float32))
+        self.__get_flops(conc_func)
 
         self.summary_writer = tf.summary.create_file_writer(self.ckpt_dir)
         self.save_params()
 
-    @tf.function
     def step(self, x, y, iteration=0, train=False):
 
         with tf.GradientTape() as tape:
-            logits = self.model(x, verbose=False)
+            logits = self.model.forward(x, verbose=False)
             smce = tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=logits)
             loss = tf.math.reduce_mean(smce)
 
@@ -42,6 +46,25 @@ class CNN(object):
                 tf.summary.scalar('ResNeSt/accuracy', accuracy, step=iteration)
 
         return loss, accuracy, score
+
+    def __get_flops(self, conc_func):
+
+        frozen_func, graph_def = convert_variables_to_constants_v2_as_graph(conc_func)
+
+        with tf.Graph().as_default() as graph:
+            tf.compat.v1.graph_util.import_graph_def(graph_def, name='')
+
+            run_meta = tf.compat.v1.RunMetadata()
+            opts = tf.compat.v1.profiler.ProfileOptionBuilder.float_operation()
+            flops = tf.compat.v1.profiler.profile(graph=graph, run_meta=run_meta, cmd="op", options=opts)
+
+            flop_tot = flops.total_float_ops
+            ftxt = open("flops.txt", "w")
+            for idx, name in enumerate(['', 'K', 'M', 'G', 'T']):
+                text = '%.3f [%sFLOPS]' %(flop_tot/10**(3*idx), name)
+                print(text, 10**(3*idx))
+                ftxt.write("%s\n" %(text))
+            ftxt.close()
 
     def save_params(self, tflite=False):
 
@@ -84,6 +107,8 @@ class Neuralnet(tf.Module):
         self.ksize, self.radix, self.kpaths = ksize, radix, kpaths
         self.customlayers = lay.Layers()
 
+        self.forward = tf.function(self.__call__)
+
     @tf.function
     def __call__(self, x, verbose=False):
 
@@ -119,13 +144,7 @@ class Neuralnet(tf.Module):
 
         fc1 = self.customlayers.fullcon(flat, \
             self.customlayers.get_weight(vshape=[h*w*c, self.num_class], name="fullcon1"))
-        if(verbose):
-            print("fullcon1", fc1.shape)
-            print("\nNum Parameter")
-            print("Feature Extractor : %d" %(num_param_fe))
-            print("Classifier        : %d" %(self.customlayers.num_params - num_param_fe))
-            print("Total             : %d" %(self.customlayers.num_params))
-
+        if(verbose): print("\nNum Parameter: ", self.customlayers.num_params)
         return fc1
 
     def residual_S(self, input, ksize, inchannel, outchannel, \
