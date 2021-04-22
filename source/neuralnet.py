@@ -25,6 +25,7 @@ class Agent(object):
         self.summary_writer = tf.summary.create_file_writer(self.ckpt_dir)
         self.save_params()
 
+    @tf.autograph.experimental.do_not_convert
     def step(self, x, y, iteration=0, train=False):
 
         with tf.GradientTape() as tape:
