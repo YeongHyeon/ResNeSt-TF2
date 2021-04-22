@@ -62,7 +62,7 @@ class Agent(object):
             ftxt = open("flops.txt", "w")
             for idx, name in enumerate(['', 'K', 'M', 'G', 'T']):
                 text = '%.3f [%sFLOPS]' %(flop_tot/10**(3*idx), name)
-                print(text, 10**(3*idx))
+                print(text)
                 ftxt.write("%s\n" %(text))
             ftxt.close()
 
