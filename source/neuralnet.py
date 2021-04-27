@@ -67,24 +67,29 @@ class Agent(object):
                 ftxt.write("%s\n" %(text))
             ftxt.close()
 
+
     def save_params(self, tflite=False):
 
-        vars_to_save = {}
-        for idx, name in enumerate(self.model.customlayers.name_bank):
-            vars_to_save[self.model.customlayers.name_bank[idx]] = self.model.customlayers.params_trainable[idx]
-        vars_to_save["optimizer"] = self.optimizer
-
-        ckpt = tf.train.Checkpoint(**vars_to_save)
-        ckptman = tf.train.CheckpointManager(ckpt, directory=self.ckpt_dir, max_to_keep=3)
-        ckptman.save()
-
         if(tflite):
-            conc_func = self.model.__call__.get_concrete_function(tf.TensorSpec(shape=(1, self.height, self.width, self.channel), dtype=tf.float32))
+            # https://github.com/tensorflow/tensorflow/issues/42818
+            conc_func = self.__model.__call__.get_concrete_function(tf.TensorSpec(shape=(1, self.dim_t, self.dim_c), dtype=tf.float32))
             converter = tf.lite.TFLiteConverter.from_concrete_functions([conc_func])
+
+            converter.optimizations = [tf.lite.Optimize.DEFAULT]
+            converter.experimental_new_converter = True
+            converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS, tf.lite.OpsSet.SELECT_TF_OPS]
+
             tflite_model = converter.convert()
 
             with open('model.tflite', 'wb') as f:
                 f.write(tflite_model)
+        else:
+            vars_to_save = self.__model.layer.parameters.copy()
+            vars_to_save["optimizer"] = self.optimizer
+
+            ckpt = tf.train.Checkpoint(**vars_to_save)
+            ckptman = tf.train.CheckpointManager(ckpt, directory=os.path.join(self.ckpt_dir, model), max_to_keep=1)
+            ckptman.save()
 
     def load_params(self):
 
