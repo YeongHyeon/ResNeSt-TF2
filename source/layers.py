@@ -4,7 +4,7 @@ class Layers(object):
 
     def __init__(self):
 
-        self.name_bank, self.params_trainable = [], []
+        self.parameters = {}
         self.num_params = 0
         self.initializer_xavier = tf.initializers.glorot_normal()
 
@@ -28,13 +28,12 @@ class Layers(object):
     def get_weight(self, vshape, transpose=False, bias=True, name=""):
 
         try:
-            idx_w = self.name_bank.index("%s_w" %(name))
-            if(bias): idx_b = self.name_bank.index("%s_b" %(name))
+            w = self.parameters["%s_w" %(name)]
+            b = self.parameters["%s_b" %(name)]
         except:
             w = tf.Variable(self.initializer_xavier(vshape), \
                 name="%s_w" %(name), trainable=True, dtype=tf.float32)
-            self.name_bank.append("%s_w" %(name))
-            self.params_trainable.append(w)
+            self.parameters["%s_w" %(name)] = w
 
             tmpparams = 1
             for d in vshape: tmpparams *= d
@@ -45,13 +44,9 @@ class Layers(object):
                     name="%s_b" %(name), trainable=True, dtype=tf.float32)
                 else: b = tf.Variable(self.initializer_xavier([vshape[-1]]), \
                     name="%s_b" %(name), trainable=True, dtype=tf.float32)
-                self.name_bank.append("%s_b" %(name))
-                self.params_trainable.append(b)
+                self.parameters["%s_b" %(name)] = b
 
                 self.num_params += vshape[-2]
-        else:
-            w = self.params_trainable[idx_w]
-            if(bias): b = self.params_trainable[idx_b]
 
         if(bias): return w, b
         else: return w
@@ -80,22 +75,17 @@ class Layers(object):
         var = std**2
 
         try:
-            idx_offset = self.name_bank.index("%s_offset" %(name))
-            idx_scale = self.name_bank.index("%s_scale" %(name))
+            offset = self.parameters["%s_offset" %(name)]
+            scale = self.parameters["%s_scale" %(name)]
         except:
             offset = tf.Variable(0, \
                 name="%s_offset" %(name), trainable=True, dtype=tf.float32)
-            self.name_bank.append("%s_offset" %(name))
-            self.params_trainable.append(offset)
+            self.parameters["%s_offset" %(name)] = offset
             self.num_params += 1
             scale = tf.Variable(1, \
                 name="%s_scale" %(name), trainable=True, dtype=tf.float32)
-            self.name_bank.append("%s_scale" %(name))
-            self.params_trainable.append(scale)
+            self.parameters["%s_scale" %(name)] = scale
             self.num_params += 1
-        else:
-            offset = self.params_trainable[idx_offset]
-            scale = self.params_trainable[idx_scale]
 
         offset # zero
         scale # one

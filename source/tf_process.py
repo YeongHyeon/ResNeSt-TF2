@@ -23,7 +23,7 @@ def training(neuralnet, dataset, epochs, batch_size, normalize=True):
             iteration += 1
             if(terminator): break
 
-        neuralnet.save_params()
+        neuralnet.save_params(model='final_epoch')
 
         print("Epoch [%d / %d] (%d iteration)  Loss:%.5f, Acc:%.5f" \
             %(epoch, epochs, iteration, loss, accuracy))
