@@ -79,7 +79,9 @@ Total | Accuracy: 0.99130, Precision: 0.99123, Recall: 0.99138, F1-Score: 0.9912
 [1] Hang Zhang et al. (2020). <a href="https://arxiv.org/abs/2004.08955">ResNeSt: Split-Attention Networks</a>. arXiv preprint arXiv:2004.08955.
 
 ## Appendix
+### Star by original ResNeSt author
 <div align="center">
   <img src="./figures/star.png" width="800">  
   <p>The authors of ResNeSt [1] have marked stars in this repository.</p>
 </div>
+### Trained Model
